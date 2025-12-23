@@ -144,7 +144,8 @@ class Planet:
         strength,
         angle,
         init_altitude=100e3,
-        dt=0.05,
+        dt=0.005,
+        output_dt=0.05,
         radians=False,
     ):
         """
@@ -174,6 +175,9 @@ class Planet:
             Initial altitude in m
 
         dt : float, optional
+            The timestep used in the integrator
+
+        output_dt : float, optional
             The base output timestep, in s. To limit output size to "a few rows",
             the actual output timestep will be set to 100 * dt.
 
@@ -206,9 +210,7 @@ class Planet:
         t = 0.0
 
         # RK4 internal timestep
-        h_rk4 = 0.005
-        output_h = dt
-        next_output_time = output_h
+        next_output_time = output_dt
 
         # Results store
         results = {
@@ -227,15 +229,17 @@ class Planet:
         steady_time_duration = 5  # seconds
         max_steady_steps_limit = 5000
 
-        steady_steps = min(max_steady_steps_limit, int(steady_time_duration / h_rk4))
+        steady_steps = min(max_steady_steps_limit, int(steady_time_duration / dt))
         rel_tol_trajectory = 5e-5
         rel_tol_dynamics = 5e-5  # 0.1% velocity and mass
         eps = 1e-12
 
-        # Histories for early stopping (tracked at RK4 steps, seed with initial values)
-        vel_history = [velocity]
-        mass_history = [mass]
-        dist_history = [0.0]
+        vel_hist = np.empty(steady_steps + 1)
+        mass_hist = np.empty(steady_steps + 1)
+        dist_hist = np.empty(steady_steps + 1)
+
+        count = 0
+        idx = 0
 
         # Constants
         Cd, Ch, Q, Cl, g = self.Cd, self.Ch, self.Q, self.Cl, self.g
@@ -246,8 +250,7 @@ class Planet:
         Pf = self.pancake_factor
 
         # Derivatives
-        def compute_derivatives(time, state):
-
+        def compute_derivatives(state):
             v_curr, m_curr, theta_curr, z_curr, x_curr, r_curr, u_curr = state
 
             """
@@ -344,28 +347,28 @@ class Planet:
 
         # RK4 loop
         iteration = 0
-        # maximum iterations cap depending on the internal timestep (runs for )
-        max_iter = (1500 / h_rk4) + 5000
+        # maximum iterations cap depending on the internal timestep
+        max_iter = (1000 / dt) + 5000
 
         while (y[3] > 0.0) and (y[1] > 0.0) and (iteration < max_iter):
             iteration += 1
 
-            k1 = compute_derivatives(t, y)
-            k2 = compute_derivatives(t + 0.5 * h_rk4, y + 0.5 * h_rk4 * k1)
-            k3 = compute_derivatives(t + 0.5 * h_rk4, y + 0.5 * h_rk4 * k2)
-            k4 = compute_derivatives(t + h_rk4, y + h_rk4 * k3)
+            k1 = compute_derivatives(y)
+            k2 = compute_derivatives(y + 0.5 * dt * k1)
+            k3 = compute_derivatives(y + 0.5 * dt * k2)
+            k4 = compute_derivatives(y + dt * k3)
 
-            y_new = y + (h_rk4 / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
-            t_new = t + h_rk4
+            y_new = y + (dt / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
+            t_new = t + dt
 
             # Boundary handling (ground or full ablation)
-            is_ground_hit = y_new[3] < 0.0
+            is_ground_hit = y_new[3] <= 0.0
             is_ablated = y_new[1] <= 0.0
 
             if is_ground_hit or is_ablated:
                 if is_ground_hit and k1[3] < 0.0:
                     dt_remain = -y[3] / k1[3]
-                    if 1e-10 < dt_remain < h_rk4:
+                    if 1e-10 < dt_remain < dt:
                         y = y + k1 * dt_remain
                         t = t + dt_remain
                     else:
@@ -394,22 +397,18 @@ class Planet:
             t = t_new
 
             # Track history at every RK4 step for early stopping
-            vel_history.append(y[0])
-            mass_history.append(y[1])
-            dist_history.append(y[4])
+            vel_hist[idx] = y[0]
+            mass_hist[idx] = y[1]
+            dist_hist[idx] = y[4]
+
+            idx = (idx + 1) % (steady_steps + 1)
+            count = min(count + 1, (steady_steps + 1))
 
             # Early-stopping condition based on last n RK4 steps
-            if len(vel_history) > steady_steps:
-                # Keep only the last steady_steps + 1 points to limit memory
-                if len(vel_history) > steady_steps + 1:
-                    vel_history = vel_history[-(steady_steps + 1) :]
-                    mass_history = mass_history[-(steady_steps + 1) :]
-                    dist_history = dist_history[-(steady_steps + 1) :]
-
-                # the last n + 1 points to get differences
-                recent_v = np.array(vel_history)
-                recent_m = np.array(mass_history)
-                recent_x = np.array(dist_history)
+            if count == steady_steps + 1:
+                recent_v = np.concatenate((vel_hist[idx:], vel_hist[:idx]))
+                recent_m = np.concatenate((mass_hist[idx:], mass_hist[:idx]))
+                recent_x = np.concatenate((dist_hist[idx:], dist_hist[:idx]))
 
                 # find absolute changes
                 dv = np.abs(np.diff(recent_v))
@@ -429,7 +428,6 @@ class Planet:
                 )
 
                 if steady:
-                    # Early sim stop
                     return pd.DataFrame(results)
 
             # Output at output times
@@ -442,21 +440,9 @@ class Planet:
                 results["distance"].append(y[4])
                 results["radius"].append(y[5])
                 results["spreading_rate"].append(y[6])
-                results["time"].append(next_output_time)
-
-                next_output_time += output_h
-
-        # If we exit by hitting max iterations, ensure last point is stored
-        if iteration >= max_iter:
-            if t > results["time"][-1]:
-                results["velocity"].append(y[0])
-                results["mass"].append(y[1])
-                results["angle"].append(y[2] if radians else np.degrees(y[2]))
-                results["altitude"].append(y[3])
-                results["distance"].append(y[4])
-                results["radius"].append(y[5])
-                results["spreading_rate"].append(y[6])
                 results["time"].append(t)
+
+                next_output_time += output_dt
 
         return pd.DataFrame(results)
 
@@ -517,7 +503,7 @@ class Planet:
 
         outcome["burst_altitude"] = result["altitude"].iloc[max_dedz_idx]
 
-        if outcome["burst_altitude"] > result["radius"].iloc[-1]:
+        if outcome["burst_altitude"] > 0:
             outcome["outcome"] = "Airburst"
             outcome["burst_peak_dedz"] = result["dedz"].iloc[max_dedz_idx]
             outcome["burst_distance"] = result["distance"].iloc[max_dedz_idx]
