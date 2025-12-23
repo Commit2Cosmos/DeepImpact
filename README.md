@@ -27,7 +27,6 @@ python download_data.py
 - pandas
 - matplotlib
 - mpltools
-- folium
 - pytest
 - sphinx
 
@@ -134,7 +133,3 @@ For example usage see `example.py` in the examples folder:
 ```
 python examples/example.py
 ```
-
-## More information
-
-For more information on the project specfication, see the python notebooks: `DamageMapper.ipynb` and `deepimpact_solver.ipynb`.
