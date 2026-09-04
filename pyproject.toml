@@ -28,6 +28,7 @@ packages = ["deepimpact"]
 
 [dependency-groups]
 dev = [
+    "black>=25.12.0",
     "coverage>=7.13.0",
     "pre-commit>=4.5.1",
     "pytest>=9.0.2",

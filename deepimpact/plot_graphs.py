@@ -58,7 +58,7 @@ def plot_altitude_energy(
             "mass",
             "velocity",
             "distance",
-            "dedz",
+            # "dedz",
             "angle",
             "radius",
         }
@@ -71,7 +71,7 @@ def plot_altitude_energy(
         altitude_km = result["altitude"] / 1e3
 
         # Plot energy loss rate
-        ax_loss.plot(result["dedz"], altitude_km, color=color, label=labels[idx])
+        # ax_loss.plot(result["dedz"], altitude_km, color=color, label=labels[idx])
 
         # Plot kinetic energy
         ax_energy.plot(
@@ -92,10 +92,10 @@ def plot_altitude_energy(
         ax_mass.plot(result["mass"], altitude_km, color=color)
 
     # Configure energy loss rate plot
-    ax_loss.set_xlabel("Energy loss (kT TNT / km)")
-    ax_loss.set_ylabel("Altitude (km)")
-    ax_loss.set_title("Altitude vs. Energy Loss Rate")
-    ax_loss.grid(True, linestyle="--", alpha=0.4)
+    # ax_loss.set_xlabel("Energy loss (kT TNT / km)")
+    # ax_loss.set_ylabel("Altitude (km)")
+    # ax_loss.set_title("Altitude vs. Energy Loss Rate")
+    # ax_loss.grid(True, linestyle="--", alpha=0.4)
 
     # Configure kinetic energy plot
     ax_energy.set_xlabel("Kinetic energy (kT)")

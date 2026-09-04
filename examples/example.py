@@ -1,20 +1,19 @@
 import deepimpact
+from deepimpact.plot_graphs import plot_altitude_energy
+import time
 
-#######################
-#   Airburst Solver   #
-#######################
 
 # Initialise the Planet class
 earth = deepimpact.Planet()
 
+
 # Solve the atmospheric entry problem for a given set of input parameters
-result = earth.solve_atmospheric_entry(radius=35, angle=45,
-                                       strength=1e7, density=3000,
-                                       velocity=19e3)
+start = time.perf_counter()
+result = earth.solve_atmospheric_entry(
+    radius=35, angle=45, strength=1e7, density=3000, velocity=19e3
+)
+end = time.perf_counter()
 
-# Calculate the kinetic energy lost per unit altitude and add it
-# as a column to the result dataframe
-result = earth.calculate_energy(result)
+plot_altitude_energy([result])
 
-# Determine the outcomes of the impact event
-outcome = earth.analyse_outcome(result)
+print(f"{end - start:.4f} seconds")

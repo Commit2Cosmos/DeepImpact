@@ -94,47 +94,41 @@ class Planet:
         self.pancake_factor = pancake_factor
         self.atmos_filename = atmos_filename
 
-        try:
-            # set function to define atmospheric density
-            if atmos_func == "exponential":
-                self.rhoa = lambda z: rho0 * np.exp(-z / H)
-            elif atmos_func == "tabular":
-                alt_rho = pd.read_csv(
-                    os.sep.join(
-                        (
-                            os.path.dirname(__file__),
-                            "..",
-                            "resources",
-                            "AltitudeDensityTable.csv",
-                        )
-                    ),
-                    sep=r"\s+",
-                    skiprows=1,
-                    names=["altitude", "rho"],
-                )
-                alt_rho["log_rho"] = np.log(alt_rho["rho"])
-                interp_log = interp1d(
-                    alt_rho["altitude"],
-                    alt_rho["log_rho"],
-                    kind="linear",
-                    fill_value="extrapolate",
-                )
+        if atmos_func == "exponential":
+            self.rhoa = lambda z: rho0 * np.exp(-z / H)
+        elif atmos_func == "tabular":
+            alt_rho = pd.read_csv(
+                os.sep.join(
+                    (
+                        os.path.dirname(__file__),
+                        "..",
+                        "resources",
+                        "AltitudeDensityTable.csv",
+                    )
+                ),
+                sep=r"\s+",
+                skiprows=1,
+                names=["altitude", "rho"],
+            )
+            alt_rho["log_rho"] = np.log(alt_rho["rho"])
+            interp_log = interp1d(
+                alt_rho["altitude"],
+                alt_rho["log_rho"],
+                kind="linear",
+                fill_value="extrapolate",
+            )
 
-                def density(h):
-                    h = float(h)
-                    return float(np.exp(interp_log(h)))
+            def density(h):
+                h = float(h)
+                return float(np.exp(interp_log(h)))
 
-                self.rhoa = lambda z: density(z)
-            elif atmos_func == "constant":
-                self.rhoa = lambda x: rho0
-            else:
-                raise NotImplementedError(
-                    "atmos_func must be 'exponential', 'tabular' or 'constant'"
-                )
-        except NotImplementedError:
-            print("atmos_func {} not implemented yet.".format(atmos_func))
-            print("Falling back to constant density atmosphere for now")
+            self.rhoa = lambda z: density(z)
+        elif atmos_func == "constant":
             self.rhoa = lambda x: rho0
+        else:
+            raise NotImplementedError(
+                "atmos_func must be 'exponential', 'tabular' or 'constant'"
+            )
 
     def solve_atmospheric_entry(
         self,
