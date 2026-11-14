@@ -7,7 +7,6 @@ from collections import Counter
 import numpy as np
 import deepimpact
 
-
 __all__ = ["damage_zones", "impact_risk"]
 
 EARTH_RADIUS_M = 6_371_000.0  # meters
