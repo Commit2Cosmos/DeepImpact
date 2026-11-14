@@ -1,135 +1,117 @@
-# DeepImpact
+# DeepImpact: Asteroid Airburst & Impact Risk Modelling
 
-## Description
+A Python package that models an asteroid entering Earth's atmosphere. A fourth-order Runge–Kutta (RK4) solver integrates the coupled equations for drag, ablation, lift, gravity and pancake-style fragmentation. It then classifies the event as an airburst or a ground impact. A mapping tool turns the result into blast-damage zones over the UK and estimates the exposed population.
 
-The airburst solver uses the asteroid’s physical properties and entry conditions to simulate how it behaves as it travels through the atmosphere. From these inputs, it generates a detailed trajectory profile that includes the object’s position, speed, mass, size, pancake spreading behaviour occurs, and the rate at which it loses kinetic energy. Beyond this full evolution history, the solver also identifies five essential outcomes: whether the event results in an airburst or a ground impact, the altitude where maximum energy is deposited, the maximum energy loss per kilometre, the total energy released at the burst, and the horizontal distance travelled before the burst occurs. 
+<p align="center">
+  <img src="docs/images/entry_profiles.png" alt="Energy deposition, velocity and radius vs altitude for three entry scenarios" width="100%">
+  <br><em>Solver output for three scenarios: a weak 10 m stony body and a 35 m body both airburst (dots mark the peak energy deposition), while a 30 m iron body survives to the ground.</em>
+</p>
 
+## Features
+
+- **Atmospheric-entry solver** (`Planet.solve_atmospheric_entry`). Returns the full trajectory history as a `DataFrame`: velocity, mass, trajectory angle, altitude, horizontal distance, radius, and spreading rate after fragmentation onset.
+- **Energy deposition** (`Planet.calculate_energy`). Adds the kinetic-energy loss per unit altitude, dE/dz in kt TNT/km.
+- **Outcome analysis** (`Planet.analyse_outcome`). Returns five quantities:
+  - event type: `Airburst` or `Cratering`
+  - burst altitude, the altitude of peak energy deposition
+  - peak dE/dz
+  - burst energy (kt TNT)
+  - horizontal distance travelled before the burst
+- **Atmosphere models**: exponential (default), tabulated, or constant density.
+- **Damage mapping**: converts the burst into airblast overpressure radii and plots them over the UK, together with postcode-level population exposure.
+
+<p align="center">
+  <img src="docs/images/damage_map.png" alt="Airblast damage zones centred near Leicester, UK" width="60%">
+  <br><em>Airblast damage zones for one impact scenario. Each ring is an overpressure threshold.</em>
+</p>
 
 ## Installation
 
-To install the module and any pre-requisites, from the base directory run
-```
+Requires Python ≥ 3.13.
+
+```bash
 pip install -e .
-```  
-
-## Downloading postcode data
-
-To download the postcode data run
-```
-python download_data.py
+python download_data.py   # UK postcode, census-population and atmosphere tables → resources/
 ```
 
-## dependencies
+## Quick start
 
-- numpy
-- scipy
-- sympy
-- pandas
-- matplotlib
-- mpltools
-- pytest
-- sphinx
+```python
+import deepimpact
 
-## Quick Example
+earth = deepimpact.Planet()  # exponential atmosphere by default
 
-### **1. Run the atmospheric entry solver**
+result = earth.solve_atmospheric_entry(
+    radius=35, velocity=19e3, density=3000, strength=1e7, angle=45
+)
+result = earth.calculate_energy(result)
+outcome = earth.analyse_outcome(result)
 
-Create a `Planet` instance and call `solve_atmospheric_entry()`.
-This function computes the dynamical evolution of an object entering the atmosphere based on its initial radius, velocity, density, strength, entry angle, and other parameters. The simulation tracks:
-
-* Changes in velocity
-* Mass loss through ablation
-* Remaining mass
-* Evolution of the trajectory angle
-* Altitude and horizontal distance
-* Radius growth due to pancake-style deformation
-* Spreading rate
-
-It returns a `DataFrame` containing the complete trajectory history.
-
-### 2.Calculate energy loss. 
-
-Pass the perivious result about volicity and mass from the 'solve_atmospheric_enery' solution to `calculate_energy()`.
-
-This function calculates: the rate of change of kinetic energy with altitude (dE/dz), in kt TNT/km, and adds this column to the results table.
-
-### 3. Analyze Event Results
-
-Use `analyze_outcome()` to analyze the results.
-
-It identifies:
-Whether the event was an airburst or a cratering;
-Peak energy deposition (peak dE/dz);
-Airburst altitude;
-Horizontal location of the airburst;
-Energy released (kt TNT).
-
-All information is returned as a dictionary.
-
-
-## Important files
-To use the core functionality of the package, you can import the main components directly from the deepimpact module:
-
-from deepimpact.solver import Planet
-
-The Planet class provides access to the three key methods:
-1. ```solve_atmospheric_entry()``` — runs the RK4 atmospheric-entry simulation
-2. ```calculate_energy()``` — computes the altitude-dependent energy-loss profile
-3. ```analyse_outcome()``` — identifies whether the event results in an airburst or ground impact
-
-Example:
-```
-planet = Planet()
-result = planet.solve_atmospheric_entry(...)
-result = planet.calculate_energy(...)
-outcome = planet.analyse_outcome(...)
+print(outcome)
+# {'outcome': 'Airburst', 'burst_altitude': ..., 'burst_peak_dedz': ...,
+#  'burst_distance': ..., 'burst_energy': ...}
 ```
 
-To evaluate the numerical accuracy of different integration methods, you can import the RMSE comparison utilities:
+To plot dE/dz, kinetic energy and the trajectory against altitude:
 
-from deepimpact.rk4_fwd_comp import Planet, calculate_error
-
-The calculate_error() function computes the RMSE between the Forward Euler and RK4 solutions, and these results can be visualised through line charts and bar charts for velocity and altitude.
-
-Plotting Energy–Altitude Profiles
-To visualise how key physical quantities evolve with altitude during atmospheric entry (e.g., energy deposition, kinetic energy, trajectory), you can import the plotting utilities:
-
+```python
 from deepimpact.plot_graphs import plot_altitude_energy
 
-### **Numerical Choices: Solver Algorithm and Time Step (`dt`)**
-
-The atmospheric-entry solver uses a fourth-order Runge–Kutta (RK4) integrator to evolve the governing differential equations describing velocity, mass loss, angle, altitude, radius growth, and pancaking behaviour. RK4 provides a stable, high-accuracy solution even in highly nonlinear regimes such as rapid fragmentation or strong deceleration.
-
-The user-specified time step `dt` controls the resolution of the output. For numerical stability and accuracy, the solver internally subdivides the RK4 step:  
-- The **internal RK4 step size** is constant (0.005) to ensure sufficient resolution during periods of rapid change.  
-- The **output sampling step** remains equal to the user-provided `dt`.
-
-A smaller `dt` improves accuracy in both the trajectory and energy-loss profiles, but increases computation time. Larger values of `dt` run faster but may miss sharp features in deceleration, ablation rate, or pancaking onset. For most scenarios, values of 0.005 seconds offer a good balance between precision and performance.
-
-To prevent unnecessary computation, the solver includes an **early-termination criterion** based on the stabilisation of velocity, mass, and horizontal distance over several RK4 iterations. This allows the simulation to stop once the trajectory has converged or the object has fully ablated.
-
-
-## Automated testing
-
-To run the pytest test suite, from the base directory run
+plot_altitude_energy([result])
 ```
+
+To map the damage zones and estimate exposed population:
+
+```python
+blat, blon, radii = deepimpact.damage_zones(
+    outcome, lat=52.79, lon=-2.95, bearing=135, pressures=[1e3, 4e3, 30e3]
+)  # surface-zero location and blast radius (m) for each overpressure (Pa)
+
+locator = deepimpact.GeospatialLocator()
+locator.get_population_by_radius((blat, blon), radii)
+# [15463333, 2976096, 5661]  → people inside each damage zone
+
+fmap = None
+for r in radii:
+    fmap = deepimpact.plot_circle(blat, blon, r, fmap=fmap)
+fmap.save("damage_map.html")  # interactive folium map
+```
+
+`deepimpact.impact_risk(planet, impact_file)` runs an uncertainty analysis over a CSV of sampled impact scenarios (radius, angle, velocity, strength, density, entry location, bearing). It returns the probability that each postcode falls inside the blast radius, plus the mean and standard deviation of the affected population.
+
+There is a runnable example in `examples/example.py`:
+
+```bash
+python examples/example.py
+```
+
+## Numerical method
+
+- **Integrator.** RK4 on the state vector (velocity, mass, angle, altitude, distance, radius). RK4 stays stable through rapid deceleration and fragmentation, where lower-order schemes oscillate.
+- **Time steps.** The integration step `dt` (default 0.005 s) is separate from the output sampling step `output_dt` (default 0.05 s). This keeps the returned table small without losing accuracy. Increasing `dt` makes runs faster but can smear sharp features such as pancaking onset.
+- **Fragmentation.** Once the ram pressure exceeds the material strength, the radius grows according to the pancake model. Growth is capped at `pancake_factor` × the initial radius (default 7).
+- **Termination.** The run stops when the body reaches the ground, ablates completely, or its velocity, mass and distance stop changing.
+
+## Testing
+
+```bash
 pytest tests/
 ```
 
-Note that you should keep the tests provided, adding new ones as you develop your code. If any of these tests fail it is likely that the scoring algorithm will not work.
+The suite covers the solver (checked against a reference scenario in `tests/scenario.npz`), the damage-radius calculations and the postcode/population locator. Run `download_data.py` first. On every push, CI runs the tests along with `black` and `ruff`.
 
 ## Documentation
 
-To generate the documentation (in html format)
-```
-python -m sphinx docs html
+Build the Sphinx docs (HTML) with:
+
+```bash
+python -m sphinx docs/source docs/html
 ```
 
-See the `docs` directory for the preliminary documentation provided that you should add to.
+## Credits
 
-## Example usage
+Built by **Team Ceres** (6 members) for the Applied Computational Science & Engineering group project at Imperial College London, November 2025. See `references.md` for sources and AI-assistance disclosures.
 
-For example usage see `example.py` in the examples folder:
-```
-python examples/example.py
-```
+## License
+
+MIT, see [LICENSE](LICENSE).
